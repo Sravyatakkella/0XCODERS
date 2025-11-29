@@ -1,0 +1,78 @@
+import requests
+
+API_KEY = "api_here"
+TARGET_CHANNEL_ID = "dQw4w9WgXcQ"   # Replace with correct creator channel ID
+
+def get_videos_by_keyword(keyword):
+    search_url = "https://www.googleapis.com/youtube/v3/search"
+    params = {
+        "part": "snippet",
+        "q": keyword,
+        "type": "video",
+        "maxResults": 20,
+        "key": API_KEY
+    }
+    response = requests.get(search_url, params=params).json()
+    return response.get("items", [])
+
+def get_video_details(video_id):
+    video_url = "https://www.googleapis.com/youtube/v3/videos"
+    params = {
+        "part": "snippet",
+        "id": video_id,
+        "key": API_KEY
+    }
+    response = requests.get(video_url, params=params).json()
+    return response.get("items", [])[0]
+
+def extract_hashtags(description):
+    words = description.split()
+    tags = [w for w in words if w.startswith("#")]
+    return tags
+
+def main():
+    keyword = input("Enter keyword to search: ")
+
+    print("\n=== ALL VIDEO RESULTS (Before Filtering) ===\n")
+    videos = get_videos_by_keyword(keyword)
+
+    for v in videos:
+        print(f"Found video: {v['snippet']['title']}")
+        print(f"Channel ID: {v['snippet']['channelId']}")
+        print("-" * 50)
+
+    print("\n=== FILTERED VIDEOS FROM TARGET CREATOR ===\n")
+
+    found_any = False
+
+    for v in videos:
+        channel_id = v["snippet"]["channelId"]
+
+        if channel_id != TARGET_CHANNEL_ID:
+            continue
+
+        found_any = True
+        video_id = v["id"]["videoId"]
+        details = get_video_details(video_id)
+
+        snippet = details["snippet"]
+        title = snippet["title"]
+        description = snippet.get("description", "")
+        hashtags = extract_hashtags(description)
+
+        print(f"📌 VIDEO TITLE: {title}")
+        print(f"🔗 VIDEO ID: {video_id}")
+        print(f"📝 DESCRIPTION: {description}")
+        print(f"🏷 HASHTAGS: {hashtags}")
+        print(f"📅 Published: {snippet['publishedAt']}")
+        print("-" * 60)
+
+    if not found_any:
+        print("\n⚠ NO VIDEOS MATCH THE CREATOR + KEYWORD COMBINATION.\n")
+        print("Possible causes:")
+        print("1️⃣ Wrong TARGET_CHANNEL_ID")
+        print("2️⃣ Creator has no videos matching the keyword")
+        print("3️⃣ Keyword too specific")
+
+if _name_ == "_main_":
+    main()
