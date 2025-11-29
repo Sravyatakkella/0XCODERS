@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>InfoPure 3D — Fake News Detector (Hologram Globe)</title>
+<meta name="description" content="Single-file demo: heuristics + optional fact-check API, with 3D hologram globe background (Three.js)"/>
+<!-- Three.js CDN -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.156.0/build/three.min.js"></script>
+<!-- optional OrbitControls for dev (commented out in production) -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.156.0/examples/js/controls/OrbitControls.min.js"></script>
+
+<style>
+  :root{
+    --bg:#070916; --panel:#0e1424; --panel-2:#0b1020; --text:#e8f3ff; --muted:#93a4c8;
+    --brand:#6ea8ff; --brand2:#45e0c8; --ok:#39d98a; --warn:#ffb86b; --danger:#ff6b6b;
+    --glass: rgba(255,255,255,.04);
+    --shadow-lg: 0 30px 80px rgba(0,0,0,.55);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%; margin:0; font-family:Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;}
+  body{background: radial-gradient(900px 600px at 6% 6%, rgba(80,100,160,.12), transparent 12%), var(--bg); color:var(--text); overflow:hidden}
+
+  /* Canvas background fills screen */
+  #bg3d { position:fixed; inset:0; z-index:0; pointer-events:none; }
+
+  /* Layout container */
+  .app { position:relative; z-index:5; max-width:1200px; margin:28px auto; padding:20px; perspective:1200px; }
+
+  header { display:flex; align-items:center; gap:16px; margin-bottom:18px; }
+  .logo { width:52px; height:52px; border-radius:14px; display:grid; place-items:center; background:linear-gradient(135deg,var(--brand),var(--brand2)); box-shadow:var(--shadow-lg); }
+  .logo svg{width:28px;height:28px}
+  .title{font-size:20px; font-weight:800}
+  .subtitle{color:var(--muted); font-size:13px; margin-top:-2px}
+
+  .status-pill{margin-left:auto; background:linear-gradient(135deg,var(--brand),var(--brand2)); color:#021018; padding:8px 12px; border-radius:999px; font-weight:700; font-size:13px; box-shadow:0 8px 30px rgba(0,0,0,.4)}
+
+  .grid{display:grid; grid-template-columns:1.2fr .8fr; gap:20px}
+  @media (max-width:1000px){ .grid{grid-template-columns:1fr} .app{padding:12px} }
+
+  .card{
+    background: linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01)), var(--panel);
+    border:1px solid rgba(255,255,255,.04);
+    border-radius:18px; box-shadow: var(--shadow-lg); overflow:visible; transform-style: preserve-3d;
+    transition: transform .18s ease, box-shadow .18s ease;
+    position:relative;
+  }
+  .card:hover{ transform: translateY(-6px) rotateX(.5deg); box-shadow: 0 40px 100px rgba(0,0,0,.6) }
+  .card .body{ padding:18px }
+  .card h3{ margin:0 0 8px; font-size:16px }
+
+  .gloss{ position:absolute; inset:0; pointer-events:none; opacity:0; transition:opacity .2s ease; border-radius:inherit }
+  .card:hover .gloss{ opacity:.08 }
+  .gloss:before{ content:''; position:absolute; left:-30%; top:-40%; width:80%; height:140%; transform:rotate(28deg);
+                 background: linear-gradient(90deg, transparent, rgba(255,255,255,.2), transparent); filter: blur(10px); }
+
+  textarea, input[type=text]{
+    width:100%; border-radius:12px; border:1px solid rgba(255,255,255,.06); padding:12px 12px; background:var(--panel-2); color:var(--text);
+    resize:vertical; min-height:180px; outline:none; box-shadow: inset 0 1px 0 rgba(255,255,255,.01)
+  }
+  textarea:focus, input:focus { box-shadow: 0 0 0 4px rgba(110,160,255,.06); border-color:rgba(110,160,255,.25) }
+
+  .actions{ display:flex; gap:10px; margin-top:12px; flex-wrap:wrap }
+  .btn{ background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01)); color:var(--text); border:1px solid rgba(255,255,255,.06);
+        padding:10px 14px; border-radius:12px; cursor:pointer; font-weight:700 }
+  .btn.primary{ background: linear-gradient(135deg,var(--brand),var(--brand2)); color:#021018; box-shadow: 0 8px 28px rgba(48, 137, 255, .12) }
+  .meta{ display:flex; justify-content:space-between; color:var(--muted); margin-top:10px; font-size:13px }
+
+  .score{ display:flex; align-items:center; gap:12px; padding:12px; border-radius:12px; background:rgba(255,255,255,.02); border:1px solid rgba(255,255,255,.03) }
+  .bar{ flex:1; height:14px; border-radius:999px; background:rgba(0,0,0,.35); overflow:hidden }
+  .bar > i { display:block; height:100%; width:0%; border-radius:999px; background:linear-gradient(90deg,var(--ok),var(--warn),var(--danger)); transition: width .8s cubic-bezier(.2,.8,.2,1) }
+  .score .label{ width:120px; text-align:right; font-weight:800 }
+
+  table{ width:100%; border-collapse:collapse; margin-top:8px }
+  th,td{ text-align:left; padding:10px 8px; border-bottom:1px dashed rgba(255,255,255,.03); font-size:14px }
+  th{ color:var(--muted) }
+
+  .chips{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px }
+  .chip{ padding:6px 10px; border-radius:999px; background:rgba(255,255,255,.02); color:var(--muted); font-size:13px; border:1px solid rgba(255,255,255,.04) }
+
+  footer{ margin-top:18px; color:var(--muted); text-align:center; font-size:13px; }
+
+  /* small screen tweaks */
+  @media (max-width:600px){
+    .logo{width:44px;height:44px} .title{font-size:18px}
+  }
+</style>
+</head>
+<body>
+
+<!-- 3D background canvas -->
+<canvas id="bg3d"></canvas>
+
+<!-- App UI -->
+<div class="app" role="application" aria-label="InfoPure 3D">
+  <header>
+    <div class="logo" aria-hidden="true">
+      <!-- shield icon -->
+      <svg viewBox="0 0 24 24"><path fill="#012430" d="M12 2l8 4v6c0 5-3.4 9.7-8 10-4.6-.3-8-5-8-10V6l8-4z"/></svg>
+    </div>
+    <div>
+      <div class="title">InfoPure 3D — Fake News Detector</div>
+      <div class="subtitle">Heuristic signals + optional API checks. Neon hologram globe in background.</div>
+    </div>
+    <div class="status-pill" id="apiStatus">API: disabled</div>
+  </header>
+
+  <div class="grid">
+    <!-- INPUT -->
+    <section class="card">
+      <div class="gloss"></div>
+      <div class="body">
+        <h3>1) Paste content</h3>
+        <textarea id="inputText" placeholder="Paste headline, tweet, or article excerpt..."></textarea>
+        <div class="actions">
+          <button class="btn primary" id="analyzeBtn">Analyze</button>
+          <button class="btn" id="clearBtn">Clear</button>
+          <button class="btn" id="sample1">Sensational sample</button>
+          <button class="btn" id="sample2">Reported sample</button>
+          <button class="btn" id="toggleApi">Enable API</button>
+        </div>
+        <div class="meta">
+          <div id="privacyNote">Nothing uploaded. Runs offline.</div>
+          <div class="chips" id="quickFacts"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- RESULT -->
+    <section class="card">
+      <div class="gloss"></div>
+      <div class="body">
+        <h3>2) Result</h3>
+        <div class="score" aria-live="polite">
+          <div class="bar"><i id="scoreFill"></i></div>
+          <div class="label" id="scoreLabel">Risk: 0%</div>
+        </div>
+
+        <div class="explain">
+          <h4 style="margin-top:14px;color:var(--muted)">Triggered Signals</h4>
+          <table aria-live="polite">
+            <thead><tr><th>Signal</th><th>Details</th><th>Impact</th></tr></thead>
+            <tbody id="explainRows"></tbody>
+          </table>
+
+          <h4 style="margin-top:12px;color:var(--muted)">What this means</h4>
+          <p id="verdictText" style="margin-top:6px"></p>
+
+          <div class="actions" style="margin-top:12px">
+            <button class="btn" id="downloadBtn">Download JSON</button>
+            <button class="btn" id="copyBtn">Copy summary</button>
+            <button class="btn" id="factCheckBtn" title="Queries your backend if enabled">API fact-check</button>
+          </div>
+
+          <!-- API area -->
+          <div id="apiArea" style="display:none; margin-top:12px">
+            <div style="color:var(--muted); font-size:13px; margin-bottom:8px">Backend endpoint</div>
+            <input id="apiEndpoint" type="text" value="http://localhost:5000/factcheck" />
+            <div id="apiContent" style="margin-top:10px; padding:10px; border-radius:10px; background:rgba(255,255,255,.02); color:var(--muted)">No request yet</div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <section class="card" style="margin-top:18px">
+    <div class="gloss"></div>
+    <div class="body">
+      <h3>How it works</h3>
+      <p>Transparent heuristics highlight suspicious patterns (clickbait phrases, ALL-CAPS, exclamation density, vague sourcing). Enable the optional backend to query a fact-check database (e.g., Google Fact Check Tools).</p>
+      <div class="chips">
+        <div class="chip">Sensational phrases</div>
+        <div class="chip">ALL-CAPS ratio</div>
+        <div class="chip">Punctuation density</div>
+        <div class="chip">Weasel words</div>
+        <div class="chip">Vague timing</div>
+        <div class="chip">Sources & quotes</div>
+        <div class="chip">Numbers w/o context</div>
+        <div class="chip">Shortened links</div>
+      </div>
+    </div>
+  </section>
+
+  <footer>Built as a single-file demo. Heuristics only; use API for official fact-checks.</footer>
+</div>
+
+<script>
+/* ---------------------------
+   1) THREE.JS Hologram Globe
+   --------------------------- */
+(function init3D(){
+  const canvas = document.getElementById('bg3d');
+  const renderer = new THREE.WebGLRenderer({ canvas, alpha:true, antialias:true });
+  const DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+  renderer.setPixelRatio(DPR);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.outputEncoding = THREE.sRGBEncoding;
+
+  const scene = new THREE.Scene();
+
+  // subtle ambient fog to blend
+  scene.fog = new THREE.FogExp2(0x070916, 0.0007);
+
+  const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 1000);
+  camera.position.set(0, 0, 55);
+
+  // globe group (wire + points)
+  const globe = new THREE.Group();
+  scene.add(globe);
+
+  // wireframe sphere (neon)
+  const radius = 14;
+  const geometry = new THREE.SphereGeometry(radius, 64, 64);
+  const wireMaterial = new THREE.MeshBasicMaterial({ color: 0x6ea8ff, wireframe: true, opacity: 0.22, transparent: true });
+  const wire = new THREE.Mesh(geometry, wireMaterial);
+  globe.add(wire);
+
+  // lat-long lines stronger (create using circles)
+  const lineMaterial = new THREE.LineBasicMaterial({ color: 0x45e0c8, linewidth: 1, transparent:true, opacity:0.18 });
+  for(let i=0;i<12;i++){
+    const lat = new THREE.CircleGeometry(radius * Math.cos(i/12*Math.PI), 128).rotateX(Math.PI/2 - (i/12*Math.PI));
+    lat.vertices = lat.attributes.position ? [] : lat; // compatibility no-op
+  }
+
+  // animated glowing points (data nodes)
+  const pointsGeo = new THREE.BufferGeometry();
+  const count = 220;
+  const positions = new Float32Array(count*3);
+  for(let i=0;i<count;i++){
+    // random points on sphere surface
+    const u = Math.random();
+    const v = Math.random();
+    const theta = 2 * Math.PI * u;
+    const phi = Math.acos(2 * v - 1);
+    const x = radius * Math.sin(phi) * Math.cos(theta);
+    const y = radius * Math.sin(phi) * Math.sin(theta);
+    const z = radius * Math.cos(phi);
+    positions[i*3] = x;
+    positions[i*3+1] = y;
+    positions[i*3+2] = z;
+  }
+  pointsGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  const pointsMat = new THREE.PointsMaterial({ size: 0.45 * (window.devicePixelRatio||1), color:0x7aa8ff, transparent:true, opacity:0.95 });
+  const points = new THREE.Points(pointsGeo, pointsMat);
+  globe.add(points);
+
+  // halo/glow (sprite)
+  const spriteMat = new THREE.SpriteMaterial({
+    map: new THREE.TextureLoader().load('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><defs><radialGradient id="g" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="%23aeeaff"/><stop offset="60%" stop-color="%2345e0c8"/><stop offset="100%" stop-color="transparent"/></radialGradient></defs><rect width="100%" height="100%" fill="url(%23g)"/></svg>'),
+    blending: THREE.AdditiveBlending, transparent: true, opacity: 0.14
+  });
+  const sprite = new THREE.Sprite(spriteMat);
+  sprite.scale.set(80,80,1);
+  globe.add(sprite);
+
+  // subtle ring (grid) - using Edges for crisp neon ring
+  const ringGeo = new THREE.RingGeometry(radius+1.2, radius+1.6, 128);
+  const ringMat = new THREE.MeshBasicMaterial({ color:0x6ea8ff, side: THREE.DoubleSide, transparent:true, opacity:0.03 });
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  ring.rotation.x = Math.PI/2 * 0.7;
+  ring.rotation.z = 0.25;
+  globe.add(ring);
+
+  // small rotation offsets to avoid perfectly centered static
+  globe.rotation.x = 0.12;
+  globe.rotation.y = 0.25;
+
+  // lights — mostly ambient + a faint directional to give depth
+  const ambient = new THREE.AmbientLight(0x7aa8ff, 0.8);
+  scene.add(ambient);
+  const dir = new THREE.DirectionalLight(0x45e0c8, 0.6);
+  dir.position.set(50,20,50);
+  scene.add(dir);
+
+  // responsive resizing
+  window.addEventListener('resize', ()=> {
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+  });
+
+  // subtle orbit for parallax using mouse move
+  let targetX = 0, targetY = 0;
+  window.addEventListener('mousemove', (e)=> {
+    const nx = (e.clientX / window.innerWidth - 0.5) * 2;
+    const ny = (e.clientY / window.innerHeight - 0.5) * 2;
+    targetX = nx * 0.05;
+    targetY = ny * 0.04;
+  });
+
+  // Animation loop
+  const clock = new THREE.Clock();
+  function animate(){
+    const t = clock.getElapsedTime();
+    // slow self-rotation
+    globe.rotation.y += 0.0024;
+    globe.rotation.x += Math.sin(t*0.06) * 0.0008;
+
+    // parallax
+    globe.rotation.y += (targetX - globe.rotation.y) * 0.02;
+    globe.rotation.x += ( -targetY - globe.rotation.x) * 0.02;
+
+    // pulsate points
+    const pos = points.geometry.attributes.position;
+    for(let i=0;i<count;i++){
+      const off = i*3;
+      // tiny breathing along normal by modifying distance
+      const nx = pos.array[off], ny = pos.array[off+1], nz = pos.array[off+2];
+      const len = Math.sqrt(nx*nx + ny*ny + nz*nz);
+      const s = 1 + 0.06 * Math.sin(t*1.5 + i);
+      pos.array[off] = (nx/len) * radius * s;
+      pos.array[off+1] = (ny/len) * radius * s;
+      pos.array[off+2] = (nz/len) * radius * s;
+    }
+    pos.needsUpdate = true;
+
+    renderer.render(scene, camera);
+    requestAnimationFrame(animate);
+  }
+  animate();
+})();
+
+/* ---------------------------
+   2) Heuristic detector UI
+   --------------------------- */
+const $ = id => document.getElementById(id);
+const clamp = (v,min,max) => Math.max(min, Math.min(max, v));
+const pct = n => `${Math.round(n)}%`;
+
+/* Rules (same as earlier) */
+const RULES = [
+  { id:'sensational', label:'Sensational / clickbait phrases',
+    detect: txt => {
+      const phrases = ['you won\'t believe','shocking','secret','miracle','exposed','banned','cure','hoax','scam','breaking','must see','urgent'];
+      const L = txt.toLowerCase(); const hits = phrases.filter(p=>L.includes(p));
+      return hits.length? {ok:true, hits}: {ok:false};
+    },
+    impact: r => r.ok? clamp(10 + r.hits.length*2,0,20):0,
+    explain: r => r.ok? `Found: ${r.hits.map(h=>`“${h}”`).join(', ')}`: 'None'
+  },
+  { id:'allcaps', label:'ALL-CAPS ratio',
+    detect: txt => { const words = txt.match(/[A-Za-z]{3,}/g)||[]; const caps = words.filter(w=>w.length>2 && w===w.toUpperCase()); const ratio = words.length? caps.length/words.length:0; return { ok: ratio>.08, ratio, count: caps.length } },
+    impact: r => r.ok? clamp(r.ratio*100,0,12):0,
+    explain: r => `ALL-CAPS: ${r.count} (${(r.ratio*100).toFixed(1)}%)`
+  },
+  { id:'punc', label:'Exclamation / question density',
+    detect: txt => { const exc = (txt.match(/[!?]/g)||[]).length; const sentences = (txt.match(/[.!?]+\s|\n/g)||[]).length || 1; const per = exc/sentences; return { ok: per>0.4, per, exc, sentences } },
+    impact: r => r.ok? clamp(r.per*20,0,10):0,
+    explain: r => `Marks: ${r.exc} across ~${r.sentences} sentences (≈${r.per.toFixed(2)}/sentence)`
+  },
+  { id:'weasel', label:'Weasel words (unclear sourcing)',
+    detect: txt => { const patterns = ['sources say','experts claim','people are saying','reportedly','allegedly','viral video shows','according to social media']; const L = txt.toLowerCase(); const hits = patterns.filter(p=>L.includes(p)); return hits.length?{ok:true,hits}:{ok:false} },
+    impact: r => r.ok? clamp(8 + r.hits.length*2,0,15):0,
+    explain: r => r.ok? `Found: ${r.hits.map(h=>`“${h}”`).join(', ')}`: 'None'
+  },
+  { id:'vague', label:'Vague timing without dates',
+    detect: txt => { const vague=/(today|yesterday|recently|this week|last night|earlier)/i; const hasDate=/(\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s+\d{1,2})/i; return { ok: vague.test(txt) && !hasDate.test(txt) } },
+    impact: r => r.ok? 6:0,
+    explain: r => r.ok? 'Vague timing terms with no explicit date': 'No issue'
+  },
+  { id:'quotes', label:'Quoted sources / outlets (reduces risk)',
+    detect: txt => { const hasQuotes=/(“[^”]{10,}”|"[^"]{10,}")/g.test(txt); const outlets=/(Reuters|BBC|Associated Press|AP News|NYTimes|Bloomberg|Al Jazeera|The Guardian)/i.test(txt); return { ok: hasQuotes||outlets, hasQuotes, outlets } },
+    impact: r => r.ok? -10:0,
+    explain: r => r.ok? `Found ${(r.hasQuotes?'quotes':'')}${(r.hasQuotes&&r.outlets)?' and ':''}${(r.outlets?'known outlets':'')}`: 'None'
+  },
+  { id:'numbers', label:'Numbers without context',
+    detect: txt => { const nums = txt.match(/\b\d{2,}(?:,\d{3})*\b/g)||[]; const hasPct = /\b\d{1,3}%\b/.test(txt); const ctx = /(according to|survey|study|report|official)/i.test(txt); const ok = (nums.length>3 || hasPct) && !ctx; return { ok, numbers:nums.length, hasPct } },
+    impact: r => r.ok? clamp(r.numbers*2 + (r.hasPct?4:0),0,10):0,
+    explain: r => r.ok? `Numbers detected (${r.numbers}) with no source`: 'No issue'
+  },
+  { id:'shortlink', label:'Shortened/suspicious links',
+    detect: txt => { const short = /(bit\.ly|tinyurl\.com|t\.co|ow\.ly|cutt\.ly|goo\.gl)/i; const links = txt.match(/https?:\/\/\S+/g)||[]; const hits = links.filter(u=>short.test(u)); return { ok:hits.length>0, hits } },
+    impact: r => r.ok? clamp(4 + r.hits.length*2,0,7):0,
+    explain: r => r.ok? `Short links: ${r.hits.join(', ')}`: 'No issue'
+  }
+];
+
+/* analyze and render (same approach as earlier) */
+function analyzeText(text){
+  const len = text.trim().length;
+  const facts=[];
+  if(len<20) facts.push('Very short — low confidence');
+  const sentences = (text.match(/[.!?]+\s|\n/g)||[]).length || (len?1:0);
+  const words = (text.match(/\b\w+\b/g)||[]).length;
+  facts.push(`${words} words`); facts.push(`${sentences} sentences`);
+
+  const results = RULES.map(rule => {
+    const res = rule.detect(text);
+    const impact = rule.impact(res);
+    return { id: rule.id, label: rule.label, impact, details: rule.explain(res) };
+  });
+
+  const raw = results.reduce((s,r)=> s + r.impact, 0);
+  const risk = clamp(raw * 2.2, 0, 100);
+  const verdict = risk < 30 ? 'Likely Reliable (verify key facts)' : risk < 60 ? 'Mixed signals — caution' : 'High risk — verify before sharing';
+  return { risk, verdict, results, facts };
+}
+
+function renderReport(rep){
+  $('scoreFill').style.width = pct(rep.risk || 0);
+  $('scoreLabel').textContent = `Risk: ${pct(rep.risk || 0)}`;
+  $('verdictText').textContent = rep.verdict || '';
+  const tbody = $('explainRows'); tbody.innerHTML = '';
+  rep.results.sort((a,b)=> Math.abs(b.impact)-Math.abs(a.impact)).forEach(r=>{
+    const tr = document.createElement('tr');
+    const impactTxt = (r.impact>0?'+':'') + r.impact.toFixed(1);
+    tr.innerHTML = `<td>${r.label}</td><td>${r.details}</td><td>${impactTxt}</td>`;
+    tbody.appendChild(tr);
+  });
+  const chips = $('quickFacts'); chips.innerHTML = '';
+  rep.facts.forEach(f => { const s = document.createElement('div'); s.className='chip'; s.textContent=f; chips.appendChild(s) });
+}
+
+/* UI wiring */
+let lastReport = null;
+$('analyzeBtn').addEventListener('click', ()=>{
+  const text = $('inputText').value || '';
+  if(!text.trim()){ alert('Paste some text first'); return;}
+  lastReport = analyzeText(text);
+  renderReport(lastReport);
+});
+$('clearBtn').addEventListener('click', ()=>{
+  $('inputText').value=''; $('explainRows').innerHTML=''; $('quickFacts').innerHTML=''; $('scoreFill').style.width='0%'; $('scoreLabel').textContent='Risk: 0%'; $('verdictText').textContent='';
+});
+$('downloadBtn').addEventListener('click', ()=>{
+  const text = $('inputText').value || '';
+  const rep = lastReport || analyzeText(text);
+  const blob = new Blob([JSON.stringify({text,report:rep,createdAt:new Date().toISOString()},null,2)],{type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download='infopure-report.json'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+});
+$('copyBtn').addEventListener('click', async ()=>{
+  const text = $('inputText').value || '';
+  const rep = lastReport || analyzeText(text);
+  const summary = `InfoPure risk: ${Math.round(rep.risk)}%\nVerdict: ${rep.verdict}\n\nTop signals:\n` + rep.results.slice().sort((a,b)=>Math.abs(b.impact)-Math.abs(a.impact)).slice(0,3).map(r=>`${r.label}: ${r.details}`).join('\n');
+  try { await navigator.clipboard.writeText(summary); alert('Summary copied'); } catch(e){ prompt('Copy summary', summary); }
+});
+
+/* Samples */
+$('sample1').addEventListener('click', ()=> $('inputText').value = "BREAKING: You won't believe what this SECRET viral video shows! Experts claim a MIRACLE cure was BANNED. Watch now!!! 95% were cured in 3 days.");
+$('sample2').addEventListener('click', ()=> $('inputText').value = "According to Reuters on March 14, 2023, the council approved a 3% budget increase after a public hearing with multiple officials quoted.");
+
+/* API toggle + factcheck */
+let apiEnabled = false;
+$('toggleApi').addEventListener('click', ()=> {
+  apiEnabled = !apiEnabled;
+  $('apiArea').style.display = apiEnabled ? 'block' : 'none';
+  $('apiStatus').textContent = apiEnabled ? 'API: enabled' : 'API: disabled';
+  $('privacyNote').textContent = apiEnabled ? 'Enabling API will send your text to the endpoint.' : 'Nothing uploaded. Runs offline.';
+});
+$('factCheckBtn').addEventListener('click', async ()=> {
+  if(!apiEnabled){ alert('Enable API first'); return; }
+  const query = ($('inputText').value || '').trim();
+  if(!query){ alert('Paste text first'); return; }
+  const endpoint = $('apiEndpoint').value.trim();
+  $('apiContent').textContent = 'Checking...';
+  try{
+    const res = await fetch(endpoint, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ query })});
+    const data = await res.json();
+    if(data.claims && data.claims.length){
+      const html = data.claims.slice(0,3).map(c=>{
+        const cr = (c.claimReview && c.claimReview[0]) || {}; const pub = (cr.publisher && cr.publisher.name) || 'Unknown';
+        return `<div style="margin:8px 0; padding:8px; border-radius:8px; background:rgba(255,255,255,.01)"><div><b>Claim:</b> ${c.text||'—'}</div><div><b>Rating:</b> ${cr.textualRating||'—'}</div><div><b>Source:</b> <a href="${cr.url||'#'}" target="_blank">${pub}</a></div></div>`;
+      }).join('');
+      $('apiContent').innerHTML = html;
+    } else {
+      $('apiContent').textContent = 'No matching fact-checks found.';
+    }
+  }catch(err){
+    console.error(err);
+    $('apiContent').textContent = 'Error contacting backend. Check endpoint & CORS.';
+  }
+});
+
+</script>
+</body>
+</html>

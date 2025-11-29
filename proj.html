@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>InfoPure — Fake News Detector (Demo)</title>
+  <meta name="description" content="Client‑side demo that scores text for fake‑news risk using transparent heuristics. No data leaves your browser." />
+  <style>
+    :root {
+      --bg: #0b1220;
+      --panel: #111a2b;
+      --muted: #8aa1c1;
+      --text: #e7eefc;
+      --brand: #6ea8fe;
+      --brand-2: #4dd7c8;
+      --danger: #ff6b6b;
+      --warn: #ffb86b;
+      --ok: #39d98a;
+      --ring: 0 0 0 2px rgba(110,168,254,.35);
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0; font: 16px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, "Helvetica Neue", Arial, Noto Sans, "Apple Color Emoji", "Segoe UI Emoji";
+      color: var(--text); background: radial-gradient(1200px 800px at 10% -10%, #1a2440 0%, var(--bg) 40%), var(--bg);
+      letter-spacing: .15px;
+    }
+    .container { max-width: 1100px; margin: 0 auto; padding: 28px 16px 80px; }
+
+    header {
+      display:flex; align-items:center; gap:14px; margin-bottom: 18px;
+    }
+    .logo {
+      width: 42px; height: 42px; border-radius: 14px; display:grid; place-items:center; background: linear-gradient(135deg, var(--brand), var(--brand-2)); box-shadow: var(--shadow);
+      position: relative; overflow: hidden;
+    }
+    .logo:before { content:""; position:absolute; inset: 10% 10% auto auto; width: 60%; height: 60%; border-radius: 50%; background: rgba(255,255,255,.25); filter: blur(6px); }
+    .logo svg { width: 26px; height: 26px; fill: white; opacity:.95; }
+    .title { font-weight: 800; font-size: 22px; letter-spacing: .3px; }
+    .subtitle { color: var(--muted); margin-top: -2px; font-size: 14px; }
+
+    .grid { display:grid; grid-template-columns: 1.2fr .8fr; gap: 18px; }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+
+    .card { background: rgba(14,22,38,.75); border: 1px solid rgba(255,255,255,.06); border-radius: 18px; box-shadow: var(--shadow); }
+    .card h3 { margin: 0 0 8px; font-size: 16px; letter-spacing:.2px; }
+    .card .body { padding: 16px; }
+
+    .textarea {
+      width: 100%; min-height: 220px; resize: vertical; border: 1px solid rgba(255,255,255,.08); border-radius: 14px;
+      background: #0f182a; color: var(--text); padding: 14px 14px 44px; outline: none;
+    }
+    .textarea:focus { box-shadow: var(--ring); border-color: rgba(110,168,254,.5); }
+
+    .actions { display:flex; flex-wrap:wrap; gap: 10px; margin-top: 10px; }
+    .btn {
+      appearance: none; border: 0; border-radius: 12px; padding: 10px 14px; font-weight: 600; letter-spacing:.2px; cursor: pointer; transition: transform .04s ease, box-shadow .2s ease;
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02)); color: var(--text); border: 1px solid rgba(255,255,255,.08);
+    }
+    .btn:hover { transform: translateY(-1px); }
+    .btn:active { transform: translateY(0); }
+    .btn.primary { background: linear-gradient(135deg, var(--brand), var(--brand-2)); color: #0b1220; box-shadow: var(--shadow); }
+    .btn.ghost { background: transparent; }
+
+    .meta { display:flex; gap: 10px; align-items:center; justify-content: space-between; margin-top: 8px; color: var(--muted); font-size: 13px; }
+
+    .score {
+      display:flex; align-items:center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: #0e182b; border: 1px solid rgba(255,255,255,.08);
+    }
+    .score .bar { flex:1; height: 12px; border-radius: 999px; background: #0a1324; position: relative; overflow: hidden; }
+    .score .bar > i { position:absolute; inset: 0 auto 0 0; width: 0%; background: linear-gradient(90deg, var(--danger), var(--warn), var(--ok)); border-radius: 999px; transition: width .45s cubic-bezier(.2,.7,.2,1); }
+    .score .label { width: 132px; text-align:right; font-weight: 700; }
+
+    .explain h4 { margin: 14px 0 6px; font-size: 14px; color: var(--muted); }
+    .explain ul { margin: 0; padding-left: 18px; }
+    .explain li { margin: 6px 0; }
+
+    .chips { display:flex; flex-wrap: wrap; gap: 8px; }
+    .chip { font-size: 12px; padding: 6px 10px; border:1px solid rgba(255,255,255,.1); color: var(--muted); border-radius: 999px; background: rgba(255,255,255,.03); }
+
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 10px 8px; border-bottom: 1px dashed rgba(255,255,255,.08); }
+    th { color: var(--muted); font-weight: 600; }
+
+    footer { margin-top: 26px; color: var(--muted); font-size: 12px; text-align:center; }
+    a { color: var(--brand-2); text-decoration: none; }
+
+    .toggle {
+      margin-left: auto; display:flex; align-items:center; gap: 8px; font-size: 13px; color: var(--muted);
+    }
+    .switch { width: 44px; height: 24px; border-radius: 999px; background: #0e182b; border: 1px solid rgba(255,255,255,.1); position: relative; cursor: pointer; }
+    .switch i { position:absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background: linear-gradient(135deg, #fff, #bcd3ff); transition: left .2s ease; }
+    .switch.on i { left: 22px; }
+
+    .light {
+      --bg: #f7fbff; --panel:#ffffff; --text:#0d1b2a; --muted:#63748a; --ring: 0 0 0 2px rgba(77,215,200,.25); background: radial-gradient(1200px 800px at 10% -10%, #eaf0ff 0%, #f7fbff 40%), #f7fbff;
+    }
+    .light .textarea{ background:#fff; color:#0d1b2a; border-color: rgba(15, 30, 50, .08); }
+    .light .score{ background: #fff; }
+  </style>
+</head>
+<body>
+  <div class="container" id="app">
+    <header>
+      <div class="logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" role="img" aria-label="shield">
+          <path d="M12 2l8 4v6c0 5-3.4 9.7-8 10-4.6-.3-8-5-8-10V6l8-4zm0 3.1L6.5 7.6v4.9c0 3.9 2.7 7.6 5.5 8 2.8-.4 5.5-4.1 5.5-8V7.6L12 5.1z"/>
+        </svg>
+      </div>
+      <div>
+        <div class="title">InfoPure — Fake News Detector (Heuristic Demo)</div>
+        <div class="subtitle">Paste an article, headline, or post. Runs locally in your browser. Transparent checks with explanations.</div>
+      </div>
+      <div class="toggle" title="Toggle light/dark">
+        <span>Light</span>
+        <div class="switch" id="themeSwitch" role="switch" aria-checked="false" tabindex="0"><i></i></div>
+      </div>
+    </header>
+
+    <div class="grid">
+      <section class="card">
+        <div class="body">
+          <h3>1) Paste content</h3>
+          <textarea id="inputText" class="textarea" placeholder="Paste news text, a headline, or a social post here…"></textarea>
+          <div class="actions">
+            <button class="btn primary" id="analyzeBtn">Analyze</button>
+            <button class="btn" id="clearBtn">Clear</button>
+            <button class="btn ghost" id="sample1">Load sample: Sensational post</button>
+            <button class="btn ghost" id="sample2">Load sample: Reported article</button>
+          </div>
+          <div class="meta">
+            <span>Nothing uploaded. Runs entirely offline.</span>
+            <div class="chips" id="quickFacts"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="body">
+          <h3>2) Result</h3>
+          <div class="score" id="scoreBox" aria-live="polite">
+            <div class="bar"><i id="scoreFill" style="width:0%"></i></div>
+            <div class="label" id="scoreLabel">Score —</div>
+          </div>
+          <div class="explain">
+            <h4>Triggered Signals</h4>
+            <table>
+              <thead><tr><th>Signal</th><th>Details</th><th>Impact</th></tr></thead>
+              <tbody id="explainRows"></tbody>
+            </table>
+
+            <h4>What this means</h4>
+            <p id="verdictText" style="margin: 8px 0 0"></p>
+
+            <div class="actions" style="margin-top:12px">
+              <button class="btn" id="downloadBtn">Download report (.json)</button>
+              <button class="btn" id="copyBtn">Copy summary</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <section class="card" style="margin-top:18px">
+      <div class="body">
+        <h3>How it works (transparent heuristics)</h3>
+        <p>This is a <strong>teaching/demo tool</strong>, not a definitive fact checker. It flags patterns that often appear in misleading content and explains why. Always corroborate with trusted sources.</p>
+        <div class="chips">
+          <span class="chip">Sensational phrases</span>
+          <span class="chip">ALL‑CAPS words</span>
+          <span class="chip">Exclamation density</span>
+          <span class="chip">Weasel words</span>
+          <span class="chip">Vague timing</span>
+          <span class="chip">Source & quotes</span>
+          <span class="chip">Numbers without context</span>
+          <span class="chip">Shortened links</span>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      Built as a client‑side demo. No ML model; rules are visible below. Improve it by swapping in a proper classifier/API later.
+    </footer>
+  </div>
+
+<script>
+// --- Utility helpers --------------------------------------------------------
+const byId = (id) => document.getElementById(id);
+const clamp = (v,min,max) => Math.max(min, Math.min(max, v));
+const pct = (n) => `${Math.round(n)}%`;
+
+// --- Heuristic rules --------------------------------------------------------
+const RULES = [
+  {
+    id: 'sensational_phrases', label: 'Sensational / clickbait phrases', weight: 20,
+    detect: (txt) => {
+      const phrases = [
+        'you won\'t believe', 'shocking', 'secret', 'miracle', 'exposed', 'banned',
+        'cure', 'controversial', 'hoax', 'scam', 'guaranteed', 'breaking', 'alert',
+        'proof', 'unbelievable', 'watch', 'must see', 'click here', 'urgent', 'warning',
+        'destroyed', 'explosive', 'hidden truth', 'wake up', 'they don\'t want you to know'
+      ];
+      const lower = txt.toLowerCase();
+      const hits = phrases.filter(p => lower.includes(p));
+      return hits.length ? { ok: true, hits } : { ok: false };
+    },
+    impact: (res) => res.ok ? clamp(10 + res.hits.length*2, 0, 20) : 0,
+    explain: (res) => res.ok ? `Found: ${res.hits.map(h=>`“${h}”`).join(', ')}` : 'None found'
+  },
+  {
+    id: 'all_caps', label: 'ALL‑CAPS word ratio', weight: 12,
+    detect: (txt) => {
+      const words = txt.match(/[A-Za-z]{3,}/g) || [];
+      const caps = words.filter(w => w.length > 2 && w === w.toUpperCase());
+      const ratio = words.length ? caps.length/words.length : 0;
+      return { ok: ratio > 0.08, ratio, count: caps.length };
+    },
+    impact: (res) => res.ok ? clamp(res.ratio*100, 0, 12) : 0,
+    explain: (res) => `ALL‑CAPS words: ${res.count} (${(res.ratio*100).toFixed(1)}%)`
+  },
+  {
+    id: 'exclaim_density', label: 'Exclamation / question density', weight: 10,
+    detect: (txt) => {
+      const exc = (txt.match(/[!?]/g) || []).length;
+      const sentences = (txt.match(/[.!?]+\s|\n/g) || []).length || 1;
+      const per = exc / sentences;
+      return { ok: per > 0.4, per, exc, sentences };
+    },
+    impact: (res) => res.ok ? clamp(res.per*20, 0, 10) : 0,
+    explain: (res) => `Marks: ${res.exc} across ~${res.sentences} sentences (≈${res.per.toFixed(2)} per sentence)`
+  },
+  {
+    id: 'weasel', label: 'Weasel words (unclear sourcing)', weight: 15,
+    detect: (txt) => {
+      const patterns = [
+        'sources say', 'experts claim', 'people are saying', 'it is said', 'reportedly',
+        'allegedly', 'some say', 'according to social media', 'viral video shows', 'forwarded as received'
+      ];
+      const t = txt.toLowerCase();
+      const hits = patterns.filter(p => t.includes(p));
+      return hits.length ? { ok: true, hits } : { ok: false };
+    },
+    impact: (res) => res.ok ? clamp(8 + res.hits.length*2, 0, 15) : 0,
+    explain: (res) => res.ok ? `Found: ${res.hits.map(h=>`“${h}”`).join(', ')}` : 'None'
+  },
+  {
+    id: 'vague_time', label: 'Vague timing without dates', weight: 8,
+    detect: (txt) => {
+      const vague = /(today|yesterday|last night|recently|earlier|this week|this month)/i;
+      const hasDate = /(\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s+\d{1,2}(?:,\s*\d{4})?)/i;
+      return { ok: vague.test(txt) && !hasDate.test(txt) };
+    },
+    impact: (res) => res.ok ? 6 : 0,
+    explain: (res) => res.ok ? 'Vague timing words present but no explicit date' : 'No issue'
+  },
+  {
+    id: 'quotes_sources', label: 'Quoted sources / reputable outlets', weight: -12,
+    detect: (txt) => {
+      const hasQuotes = /(“[^”]{10,}”|"[^"]{10,}")/g.test(txt);
+      const outlets = /(Reuters|Associated Press|BBC|The Guardian|NYTimes|AP News|Al Jazeera|The Hindu|Indian Express|Hindustan Times|WSJ|Bloomberg)/i.test(txt);
+      return { ok: hasQuotes || outlets, hasQuotes, outlets };
+    },
+    impact: (res) => res.ok ? -10 : 0,
+    explain: (res) => res.ok ? `Found ${(res.hasQuotes? 'quotes': '')}${(res.hasQuotes&&res.outlets)?' and ':''}${(res.outlets? 'known outlets':'')}` : 'None detected'
+  },
+  {
+    id: 'numbers_context', label: 'Numbers without context', weight: 10,
+    detect: (txt) => {
+      const numbers = txt.match(/\b\d{2,}(?:,\d{3})*\b/g) || [];
+      const hasPercent = /\b\d{1,3}%\b/.test(txt);
+      const contextWords = /(according to|survey|study|report|dataset|census|official)/i.test(txt);
+      const ok = (numbers.length > 3 || hasPercent) && !contextWords;
+      return { ok, numbers: numbers.length, hasPercent };
+    },
+    impact: (res) => res.ok ? clamp(res.numbers*2 + (res.hasPercent?4:0), 0, 10) : 0,
+    explain: (res) => res.ok ? `Numbers detected (${res.numbers}) but no source context words` : 'No issue'
+  },
+  {
+    id: 'short_links', label: 'Shortened / suspicious links', weight: 7,
+    detect: (txt) => {
+      const shorteners = /(bit\.ly|tinyurl\.com|t\.co|ow\.ly|buff\.ly|goo\.gl|is\.gd|rebrand\.ly|cutt\.ly)/i;
+      const links = txt.match(/https?:\/\/\S+/g) || [];
+      const hits = links.filter(u => shorteners.test(u));
+      return { ok: hits.length>0, hits };
+    },
+    impact: (res) => res.ok ? clamp(4 + res.hits.length*2, 0, 7) : 0,
+    explain: (res) => res.ok ? `Short links: ${res.hits.join(', ')}` : 'No issue'
+  }
+];
+
+function analyzeText(text) {
+  const startLen = text.trim().length;
+  const facts = [];
+  if (startLen < 20) facts.push('Very short — low confidence');
+  const sentences = (text.match(/[.!?]+\s|\n/g) || []).length || (startLen?1:0);
+  const words = (text.match(/\b\w+\b/g) || []).length;
+  facts.push(`${words} words`);
+  facts.push(`${sentences} sentences`);
+
+  const results = RULES.map(rule => {
+    const res = rule.detect(text);
+    const impact = rule.impact(res);
+    return { id: rule.id, label: rule.label, impact, details: rule.explain(res) };
+  });
+
+  const rawScore = results.reduce((s,r)=> s + r.impact, 0);
+  // Risk score: 0 (real‑leaning) .. 100 (fake‑leaning)
+  const risk = clamp(rawScore * 2.2, 0, 100);
+
+  const verdict = risk < 30 ? 'Likely Reliable (but verify key facts)' :
+                  risk < 60 ? 'Unclear / Mixed signals — Treat with caution' :
+                              'High Risk of Misinformation — Do not share without verification';
+
+  return { risk, verdict, results, facts };
+}
+
+function renderReport(report){
+  // Meter
+  byId('scoreFill').style.width = pct(report.risk);
+  byId('scoreLabel').textContent = `Risk: ${pct(report.risk)}`;
+  byId('verdictText').textContent = report.verdict;
+
+  // Rows
+  const tbody = byId('explainRows');
+  tbody.innerHTML = '';
+  report.results.sort((a,b)=> Math.abs(b.impact)-Math.abs(a.impact)).forEach(r => {
+    const tr = document.createElement('tr');
+    const impactTxt = (r.impact>0?'+':'') + r.impact.toFixed(1);
+    tr.innerHTML = `<td>${r.label}</td><td>${r.details}</td><td>${impactTxt}</td>`;
+    tbody.appendChild(tr);
+  });
+
+  // Facts chips
+  const chips = byId('quickFacts');
+  chips.innerHTML = '';
+  report.facts.forEach(f=>{
+    const s = document.createElement('span'); s.className='chip'; s.textContent=f; chips.appendChild(s);
+  });
+}
+
+function download(filename, data) {
+  const blob = new Blob([data], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 0);
+}
+
+function summaryText(text, report) {
+  const top = report.results
+    .slice().sort((a,b)=> Math.abs(b.impact)-Math.abs(a.impact))
+    .slice(0,3)
+    .map(r=>`• ${r.label}: ${r.details} (${r.impact>0?'+':''}${r.impact.toFixed(1)})`).join('\n');
+  return `InfoPure fake‑news risk: ${Math.round(report.risk)}%\nVerdict: ${report.verdict}\n\nTop signals:\n${top}\n\nExcerpt:\n${text.trim().slice(0,220)}${text.trim().length>220?'…':''}`;
+}
+
+// --- Wire up UI -------------------------------------------------------------
+let latestReport = null;
+
+byId('analyzeBtn').addEventListener('click', () => {
+  const text = byId('inputText').value;
+  if (!text.trim()) { alert('Please paste some text to analyze.'); return; }
+  latestReport = analyzeText(text);
+  renderReport(latestReport);
+});
+
+byId('clearBtn').addEventListener('click', () => {
+  byId('inputText').value = '';
+  byId('explainRows').innerHTML = '';
+  byId('quickFacts').innerHTML = '';
+  byId('scoreFill').style.width = '0%';
+  byId('scoreLabel').textContent = 'Score —';
+  byId('verdictText').textContent = '';
+});
+
+byId('downloadBtn').addEventListener('click', () => {
+  const text = byId('inputText').value || '';
+  const report = latestReport || analyzeText(text);
+  download('infopure-report.json', JSON.stringify({ text, report, createdAt: new Date().toISOString() }, null, 2));
+});
+
+byId('copyBtn').addEventListener('click', async () => {
+  const text = byId('inputText').value || '';
+  const report = latestReport || analyzeText(text);
+  try {
+    await navigator.clipboard.writeText(summaryText(text, report));
+    alert('Summary copied to clipboard.');
+  } catch (e) {
+    alert('Could not copy automatically. Select and copy manually:\n\n' + summaryText(text, report));
+  }
+});
+
+// Theme toggle
+const themeSwitch = byId('themeSwitch');
+const setTheme = (light) => {
+  document.body.classList.toggle('light', !!light);
+  themeSwitch.classList.toggle('on', !!light);
+  themeSwitch.setAttribute('aria-checked', !!light);
+  localStorage.setItem('infopure-theme', light? 'light' : 'dark');
+};
+const saved = localStorage.getItem('infopure-theme');
+setTheme(saved === 'light');
+['click','keydown'].forEach(evt => themeSwitch.addEventListener(evt, (e)=>{
+  if (e.type==='keydown' && !['Enter',' '].includes(e.key)) return;
+  setTheme(!document.body.classList.contains('light'));
+}));
+
+// Samples
+byId('sample1').addEventListener('click', () => {
+  byId('inputText').value = `BREAKING: You won't believe what this SECRET viral video shows! Experts claim a MIRACLE cure was BANNED after exposing the hidden truth. Watch now before it's deleted!!! People are saying 95% were cured in just 3 days. Forwarded as received.`;
+});
+byId('sample2').addEventListener('click', () => {
+  byId('inputText').value = `According to a report published by Reuters on March 14, 2023, the city council approved a 3% budget increase after a public hearing. The report cites an official statement and includes quotes from multiple council members outlining the expected impact.`;
+});
+</script>
+</body>
+</html>
